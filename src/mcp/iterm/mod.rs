@@ -288,7 +288,7 @@ pub mod tty_reader {
         }
         
         /// Extract the last `n` lines from a string.
-        fn extract_lines(&self, input: &str, n: usize) -> String {
+        pub fn extract_lines(&self, input: &str, n: usize) -> String {
             if n == 0 || input.is_empty() {
                 return String::new();
             }
