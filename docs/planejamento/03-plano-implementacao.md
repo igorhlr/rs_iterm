@@ -24,20 +24,36 @@ Resumo do Estado Atual
    - Execução de comandos via AppleScript
    - Uso de `spawn_blocking` para não bloquear o runtime async
 
-3. **Testes**
+3. **TtyReader**
+   - Implementação completa de leitura do TTY
+   - Strip de códigos ANSI
+   - Extração de linhas específicas
+   - Configuração de buffer size
+
+4. **ControlCharacterSender**
+   - Implementação completa de envio de caracteres de controle para o TTY
+   - Mapeamento de letras para códigos de controle
+   - Validação de entrada
+
+5. **Router MCP**
+   - Implementação completa do protocolo MCP
+   - Parsing de mensagens JSON
+   - Roteamento para handlers corretos
+   - Serialização de respostas
+   - Tratamento de erros detalhado
+
+6. **Testes**
    - Unit tests para `escape` e mock runner
    - Testes de integração macOS-only para o runner system
-   - Total de 15 testes passando com sucesso
+   - Testes para TtyReader e ControlCharacterSender
+   - Testes para o Router MCP
+   - Total de testes abrangendo os casos principais
 
-4. **Estrutura do Projeto**
-   - Módulos organizados de forma clara
-   - Documentação detalhada
-   - Build e testes estáveis
-
-### 🔄 Componentes Parcialmente Implementados (Stubs)
-1. **TtyReader** - Stub retornando string vazia
-2. **ControlCharacterSender** - Stub validando apenas input
-3. **Router** - Implementação mínima sem protocolo MCP completo
+### 🔄 Componentes Parcialmente Implementados
+1. **Server Enhancements**
+   - Implementação básica de servidor TCP
+   - Registro de ferramentas
+   - Falta implementar gerenciamento robusto de conexões e shutdown
 
 ### ❌ Componentes Pendentes
 1. **Process Tracker** - Não implementado
@@ -49,11 +65,12 @@ Decisões de design
 - **Testabilidade**: trait `OsascriptRunner` permite testes sem invocar binários do sistema.
 - **Separação de responsabilidades**: lógica AppleScript isolada em `applescript.rs`.
 - **Injeção de dependência**: facilita testes unitários e substitui componentes conforme necessário.
+- **Protocolo MCP**: implementação completa com parsing JSON, validação de mensagens, roteamento e serialização de respostas.
 
 Plano detalhado de implementação (próximos passos)
 -------------------------------------------------
 
-### Fase 1: Core TtyReader & ControlCharacterSender (Prioridade Alta)
+### Fase 1: Core TtyReader & ControlCharacterSender (Prioridade Alta) - CONCLUÍDO
 
 1. **Implementar TtyReader Completo**
    - [x] Adicionar campo `tty_path: Option<String>` para armazenar caminho do TTY
@@ -71,14 +88,14 @@ Plano detalhado de implementação (próximos passos)
    - [x] Usar `letter_to_control_char` para mapeamento correto
    - [x] Adicionar testes unitários e de integração
 
-### Fase 2: Implementação do Protocolo MCP (Prioridade Média)
+### Fase 2: Implementação do Protocolo MCP (Prioridade Média) - CONCLUÍDO
 
 1. **Router Completo**
-   - [ ] Implementar parsing de mensagens MCP JSON
-   - [ ] Implementar roteamento para handlers corretos
-   - [ ] Implementar serialização de respostas
-   - [ ] Adicionar tratamento de erros e logging detalhado
-   - [ ] Adicionar testes de integração para fluxo completo
+   - [x] Implementar parsing de mensagens MCP JSON
+   - [x] Implementar roteamento para handlers corretos
+   - [x] Implementar serialização de respostas
+   - [x] Adicionar tratamento de erros e logging detalhado
+   - [x] Adicionar testes de integração para fluxo completo
 
 2. **Server Enhancements**
    - [ ] Implementar gerenciamento de conexões mais robusto
@@ -100,187 +117,6 @@ Plano detalhado de implementação (próximos passos)
    - [ ] Melhorias na documentação
    - [ ] Completar testes para edge cases
 
-Plano de Implementação Detalhado para TtyReader
-----------------------------------------------
-
-```rust
-pub struct TtyReader {
-    // TTY device path (e.g., "/dev/ttys001")
-    tty_path: Option<String>,
-    // Buffer size for reading from TTY
-    buffer_size: usize,
-    // Strip ANSI escape sequences
-    strip_ansi: bool,
-}
-
-impl TtyReader {
-    /// Create a new TtyReader instance.
-    pub fn new() -> Self {
-        debug!("TtyReader::new()");
-        TtyReader {
-            tty_path: None,
-            buffer_size: 8192, // 8KB buffer default
-            strip_ansi: true,  // Strip ANSI by default
-        }
-    }
-
-    /// Initialize the TTY reader by finding the active TTY.
-    pub async fn initialize(&mut self) -> Result<()> {
-        // Try to get the active TTY path
-        self.tty_path = match crate::mcp::utilities::get_active_tty() {
-            Ok(path) => {
-                debug!("Found active TTY: {}", path);
-                Some(path)
-            }
-            Err(e) => {
-                error!("Failed to get active TTY: {}", e);
-                None
-            }
-        };
-
-        Ok(())
-    }
-
-    /// Read `lines` lines from the terminal output buffer.
-    pub async fn read_lines(&mut self, lines: usize) -> Result<String> {
-        info!("Reading {} lines from terminal output", lines);
-        
-        // Ensure we have a TTY path
-        if self.tty_path.is_none() {
-            self.initialize().await?;
-        }
-        
-        let tty_path = match &self.tty_path {
-            Some(path) => path,
-            None => return Err(anyhow::anyhow!("No active TTY found")),
-        };
-        
-        // Open the TTY device for reading
-        let file = tokio::fs::OpenOptions::new()
-            .read(true)
-            .open(tty_path)
-            .await
-            .context(format!("Failed to open TTY device: {}", tty_path))?;
-        
-        // Read from TTY using a BufReader
-        let mut reader = tokio::io::BufReader::new(file);
-        let mut buffer = vec![0; self.buffer_size];
-        
-        // Read available data
-        let n = reader.read(&mut buffer).await
-            .context("Failed to read from TTY")?;
-        
-        buffer.truncate(n);
-        
-        // Convert to string (lossy to handle invalid UTF-8)
-        let mut content = String::from_utf8_lossy(&buffer).to_string();
-        
-        // Strip ANSI escape sequences if configured
-        if self.strip_ansi {
-            content = self.strip_ansi_codes(&content);
-        }
-        
-        // Extract specified number of lines
-        let extracted = self.extract_lines(&content, lines);
-        
-        Ok(extracted)
-    }
-    
-    /// Strip ANSI escape sequences from a string.
-    fn strip_ansi_codes(&self, input: &str) -> String {
-        // Simple regex to strip common ANSI escape sequences
-        let re = regex::Regex::new(r"\x1B\[[0-9;]*[a-zA-Z]").unwrap();
-        re.replace_all(input, "").to_string()
-    }
-    
-    /// Extract the last `n` lines from a string.
-    fn extract_lines(&self, input: &str, n: usize) -> String {
-        if n == 0 {
-            return String::new();
-        }
-        
-        let lines: Vec<&str> = input.lines().collect();
-        let start = if lines.len() > n { lines.len() - n } else { 0 };
-        
-        lines[start..].join("\n")
-    }
-}
-```
-
-Plano de Implementação Detalhado para ControlCharacterSender
-----------------------------------------------------------
-
-```rust
-pub struct ControlCharacterSender {
-    // TTY device path (e.g., "/dev/ttys001")
-    tty_path: Option<String>,
-}
-
-impl ControlCharacterSender {
-    /// Create a new control character sender.
-    pub fn new() -> Self {
-        debug!("ControlCharacterSender::new()");
-        ControlCharacterSender {
-            tty_path: None,
-        }
-    }
-
-    /// Initialize the sender by finding the active TTY.
-    pub async fn initialize(&mut self) -> Result<()> {
-        // Try to get the active TTY path
-        self.tty_path = match crate::mcp::utilities::get_active_tty() {
-            Ok(path) => {
-                debug!("Found active TTY: {}", path);
-                Some(path)
-            }
-            Err(e) => {
-                error!("Failed to get active TTY: {}", e);
-                None
-            }
-        };
-
-        Ok(())
-    }
-
-    /// Send a control character (example: "C" -> Ctrl-C).
-    pub async fn send_control_character(&mut self, letter: &str) -> Result<()> {
-        info!("Sending control character: {}", letter);
-
-        // Validate input
-        if letter.is_empty() {
-            return Err(anyhow::anyhow!("Control character must not be empty"));
-        }
-
-        // Convert letter to control code
-        let ctrl_code = crate::mcp::utilities::letter_to_control_char(letter)
-            .context(format!("Invalid control character: {}", letter))?;
-
-        // Ensure we have a TTY path
-        if self.tty_path.is_none() {
-            self.initialize().await?;
-        }
-        
-        let tty_path = match &self.tty_path {
-            Some(path) => path,
-            None => return Err(anyhow::anyhow!("No active TTY found")),
-        };
-        
-        // Open the TTY device for writing
-        let mut file = tokio::fs::OpenOptions::new()
-            .write(true)
-            .open(tty_path)
-            .await
-            .context(format!("Failed to open TTY device: {}", tty_path))?;
-        
-        // Write the control character to the TTY
-        file.write_all(&[ctrl_code]).await
-            .context("Failed to write control character to TTY")?;
-        
-        Ok(())
-    }
-}
-```
-
 Comandos úteis para desenvolvimento e verificação
 ------------------------------------------------
 - Rodar toda suíte de testes:
@@ -296,7 +132,7 @@ Comandos úteis para desenvolvimento e verificação
 
 - Rodar teste específico:
   ```
-  cargo test --test integration_applescript roundtrip_single_line_escape_and_return -- --nocapture
+  cargo test --test router_tests test_router_process_message -- --nocapture
   ```
 
 - Executar cargo fmt & clippy:
@@ -307,11 +143,11 @@ Comandos úteis para desenvolvimento e verificação
 
 Critérios de aceite
 -------------------
-- TtyReader implementado e funcional, lendo corretamente de TTYs reais
-- ControlCharacterSender implementado e enviando caracteres de controle para o TTY
-- Router processando mensagens MCP corretamente
-- Todos os testes passando (incluindo novos testes para funcionalidades adicionadas)
-- Documentação atualizada com instruções de uso e teste
+- ✅ TtyReader implementado e funcional, lendo corretamente de TTYs reais
+- ✅ ControlCharacterSender implementado e enviando caracteres de controle para o TTY
+- ✅ Router processando mensagens MCP corretamente
+- ✅ Todos os testes passando (incluindo novos testes para funcionalidades adicionadas)
+- ✅ Documentação atualizada com instruções de uso e teste
 
 Riscos e mitigação
 ------------------
@@ -322,24 +158,20 @@ Riscos e mitigação
 
 Próximos passos imediatos
 -------------------------
-1. **Implementar TtyReader real**
-   - Adicionar suporte a leitura de TTY
-   - Implementar funções auxiliares (strip ANSI, extração de linhas)
-   - Adicionar testes unitários e de integração
+1. **Implementar melhorias no servidor**
+   - Adicionar gerenciamento de conexões mais robusto
+   - Implementar graceful shutdown
+   - Adicionar health checks
 
-2. **Implementar ControlCharacterSender real**
-   - Adicionar suporte a escrita no TTY
-   - Implementar mapeamento de caracteres de controle
-   - Adicionar testes unitários e de integração
+2. **Iniciar implementação do Process Tracker**
+   - Implementar tracking de processos via `ps`
+   - Adicionar detecção de foreground process
+   - Implementar monitoramento de recursos
 
-3. **Iniciar melhorias no Router**
-   - Implementar parsing básico de mensagens MCP
-   - Adicionar roteamento para handlers
-
-4. **Atualizar documentação e testes**
-   - Documentar as novas implementações
-   - Adicionar testes para cobrir as novas funcionalidades
-   - Atualizar plano de testes
+3. **Melhorias de qualidade**
+   - Refinar documentação
+   - Adicionar testes para edge cases
+   - Melhorar performance
 
 Observações operacionais
 ------------------------
@@ -351,7 +183,11 @@ Observações operacionais
 
 Status atual
 -----------
-- Análise completa do projeto
-- Plano de implementação atualizado
-- Próximos passos claros para o primeiro funcionamento completo
-- Compilação e testes atuais passando com sucesso
+- ✅ Análise completa do projeto
+- ✅ Plano de implementação atualizado
+- ✅ TtyReader e ControlCharacterSender implementados e testados
+- ✅ Router MCP implementado e testado
+- ✅ Ferramentas MCP registradas e funcionais
+- 🔄 Servidor básico implementado, faltam melhorias
+- ❌ Process Tracker pendente
+
