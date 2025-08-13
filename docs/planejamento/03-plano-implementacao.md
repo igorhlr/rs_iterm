@@ -56,20 +56,20 @@ Plano detalhado de implementação (próximos passos)
 ### Fase 1: Core TtyReader & ControlCharacterSender (Prioridade Alta)
 
 1. **Implementar TtyReader Completo**
-   - [ ] Adicionar campo `tty_path: Option<String>` para armazenar caminho do TTY
-   - [ ] Implementar `initialize()` para obter TTY ativo via `get_active_tty()`
-   - [ ] Implementar `read_lines(lines: usize)` para ler do TTY real
-   - [ ] Adicionar strip de códigos ANSI
-   - [ ] Implementar extração do número especificado de linhas
-   - [ ] Adicionar testes unitários para funções auxiliares
-   - [ ] Adicionar testes de integração com TTY real (guarded por macOS)
+   - [x] Adicionar campo `tty_path: Option<String>` para armazenar caminho do TTY
+   - [x] Implementar `initialize()` para obter TTY ativo via `get_active_tty()`
+   - [x] Implementar `read_lines(lines: usize)` para ler do TTY real
+   - [x] Adicionar strip de códigos ANSI
+   - [x] Implementar extração do número especificado de linhas
+   - [x] Adicionar testes unitários para funções auxiliares
+   - [x] Adicionar testes de integração com TTY real (guarded por macOS)
 
 2. **Implementar ControlCharacterSender Completo**
-   - [ ] Adicionar campo `tty_path: Option<String>`
-   - [ ] Implementar `initialize()` para obter TTY ativo
-   - [ ] Implementar `send_control_character(letter: &str)` para envio real
-   - [ ] Usar `letter_to_control_char` para mapeamento correto
-   - [ ] Adicionar testes unitários e de integração
+   - [x] Adicionar campo `tty_path: Option<String>`
+   - [x] Implementar `initialize()` para obter TTY ativo
+   - [x] Implementar `send_control_character(letter: &str)` para envio real
+   - [x] Usar `letter_to_control_char` para mapeamento correto
+   - [x] Adicionar testes unitários e de integração
 
 ### Fase 2: Implementação do Protocolo MCP (Prioridade Média)
 
