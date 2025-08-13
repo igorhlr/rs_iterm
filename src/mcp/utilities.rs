@@ -4,14 +4,17 @@ use tracing::error;
 
 /// Verifica se o iTerm2 está instalado e em execução
 pub fn check_iterm_availability() -> bool {
-    // Verifica se o processo iTerm2 está em execução usando 'ps'
-    let output = Command::new("pgrep")
-        .arg("-x")
-        .arg("iTerm2")
+    // Tenta verificar se o iTerm2 está rodando usando AppleScript
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to (name of processes) contains \"iTerm2\"")
         .output();
     
     match output {
-        Ok(output) => !output.stdout.is_empty(),
+        Ok(output) => {
+            let result = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
+            result == "true"
+        }
         Err(e) => {
             error!("Erro ao verificar disponibilidade do iTerm2: {}", e);
             false
