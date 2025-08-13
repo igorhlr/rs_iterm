@@ -1,318 +1,136 @@
-# Plano de Implementação Detalhado - iTerm MCP em Rust
+03 - Plano de Implementação
+===========================
 
-## Visão Geral
-Este documento detalha o plano completo para implementar o servidor iTerm MCP em Rust, baseado na arquitetura do rs_filesystem existente e mantendo paridade funcional com a versão TypeScript.
+Objetivo
+--------
+Implementar e organizar de forma modular o suporte a AppleScript para interação com o iTerm2:
+- oferecer escape seguro (single-line e multiline) pronto para inserir em expressões AppleScript;
+- implementar execução de `osascript` com timeout e normalização de saída;
+- tornar o executor testável via abstração (trait) e inserir mock para CI/unit tests;
+- integrar o executor no `CommandExecutor` e preparar testes de integração macOS condicionais.
 
-## Estrutura do Projeto Target
-```
-iterm_mcp_rust/
-├── Cargo.toml                   # Configuração principal
-├── src/
-│   ├── main.rs                  # Servidor principal
-│   └── mcp/
-│       ├── mod.rs              # Módulo MCP principal
-│       ├── types.rs            # Tipos e estruturas MCP
-│       ├── utilities.rs        # Utilitários MCP base
-│       ├── tools.rs            # Registro de ferramentas
-│       ├── iterm/              # Módulos específicos do iTerm
-│       │   ├── mod.rs          # Módulo iTerm principal
-│       │   ├── command_executor.rs   # Execução de comandos
-│       │   ├── tty_reader.rs         # Leitura TTY
-│       │   ├── control_char.rs       # Caracteres de controle
-│       │   ├── process_tracker.rs    # Rastreamento de processos
-│       │   └── applescript.rs        # Wrapper AppleScript
-│       └── tests/              # Testes unitários
-├── justfile                    # Automação de build
-└── README.md                   # Documentação
-```
+Resumo do que já foi implementado
+---------------------------------
+- `applescript::escape(input: &str) -> String` — suporta single-line e multiline (concatenação com ` & return & `), escapando `\` e `"` por linha.
+- `applescript::osascript_with_timeout(e_lines: &[&str], timeout_secs: u64) -> anyhow::Result<String>` — executa `/usr/bin/osascript`, aplica timeout e normaliza line endings para `\n`.
+- Extração inicial do módulo AppleScript em `src/mcp/iterm/applescript.rs` contendo também:
+  - trait `OsascriptRunner`
+  - `SystemOsascriptRunner` (usa `osascript_with_timeout`)
+  - `MockOsascriptRunner` (fila de respostas programáveis para testes)
+- `CommandExecutor` adaptado para aceitar um runner injetável (por enquanto via construtor `new_with_runner`) e usa `spawn_blocking` para executar o runner sem bloquear o runtime async.
+- Tests:
+  - Unit tests para `escape` e mock runner (já presentes).
+  - Tests macOS-only de integração que usam o runner system (condicionados a `target_os = "macos"`).
 
----
+Decisões de design
+------------------
+- Multiline: cada linha é escapada separadamente e depois concatenada com ` & return & ` dentro de parênteses — evita problemas de interpretar literais com newlines no AppleScript.
+- Normalização de linha: `osascript` pode retornar CR; o wrapper transforma CR/CRLF em LF para comparações previsíveis em testes.
+- Testabilidade: introduzir trait `OsascriptRunner` permite que unit tests não invoquem o binário do sistema e o CI do Linux rode rápido e isolado.
+- Separação de responsabilidades: extraímos lógica AppleScript para `applescript.rs` para facilitar manutenção e revisão de segurança/escaping.
 
-## 📋 FASE 1: Setup e Estrutura Base
+Plano detalhado de implementação (próximos passos)
+-------------------------------------------------
 
-### ✅ 1.1 Setup do Projeto
-- [x] Criar diretório `iterm_mcp_rust`
-- [x] Inicializar projeto Rust (`cargo init`)
-- [x] Configurar `.gitignore` Rust padrão
-- [x] Criar estrutura de diretórios MCP
-- [x] Configurar editor/IDE para Rust
+1) Consolidar módulo AppleScript (curto prazo)
+   - Garantir `src/mcp/iterm/applescript.rs` está completo e documentado, exportando:
+     - `escape`
+     - `osascript_with_timeout`
+     - `OsascriptRunner`, `SystemOsascriptRunner`, `MockOsascriptRunner`
+   - Incluir exemplos de uso na documentação interna do módulo.
 
-### ✅ 1.2 Configuração Cargo.toml
-- [ ] Copiar base do rs_filesystem
-- [ ] Adaptar nome e metadados do projeto
-- [x] Adicionar dependências específicas:
-  - [x] `tokio` para async runtime
-  - [x] `serde` e `serde_json` para serialização
-  - [x] `rpc-router` para roteamento MCP (ajustada para versão compatível durante desenvolvimento)
-  - [x] `clap` para CLI parsing
-  - [x] `regex` para parsing de strings
-- [x] Configurar profiles de build otimizados
-- [x] Adicionar features condicionais (macOS only)
+2) Finalizar injeção de dependência no `CommandExecutor` (curto prazo)
+   - Atualizar `CommandExecutor` para armazenar `runner: Arc<dyn OsascriptRunner>` e remover derive `Debug` se necessário (ou implementar `Debug` customizado).
+   - Adicionar construtores:
+     - `CommandExecutor::new()` → usa `SystemOsascriptRunner`
+     - `CommandExecutor::new_with_runner(runner: Arc<dyn OsascriptRunner>, timeout_secs: u64)`
+   - Garantir que `execute_command`:
+     - usa `applescript::escape` para construir a expressão,
+     - monta a AppleScript: `tell application "iTerm2" to tell current session of current window to write text <expr>`,
+     - chama `runner.run(...)` dentro de `spawn_blocking` para não bloquear Tokio.
 
-### ✅ 1.3 Estrutura de Módulos
-- [x] Criar `src/mcp/mod.rs` como módulo principal
-- [x] Criar `src/mcp/iterm/mod.rs` para funcionalidades iTerm (stubs iniciais)
-- [x] Configurar visibilidade de módulos
-- [ ] Estabelecer convenções de naming
-- [x] Documentar estrutura modular (documentação inicial em /docs/planejamento)
+3) Adicionar testes unitários do `CommandExecutor` (curto→médio prazo)
+   - Criar testes que instanciam `CommandExecutor::new_with_runner(Arc::new(MockOsascriptRunner::...))`.
+   - Verificar que o mock recebeu a expressão esperada ou que a expressão que seria passada ao `osascript` tem o formato correto (use o mock para gravar os `e_lines` recebidos).
+   - Cobrir casos:
+     - single-line com quotes/backslashes,
+     - multiline com newlines/tabs/unicode,
+     - comando muito grande,
+     - runner retornando erro (propagação de falha).
 
-### ✅ 1.4 Tipos Básicos MCP
-- [x] Copiar `types.rs` do rs_filesystem (base adaptada)
-- [x] Adicionar tipos específicos do iTerm:
-  - [x] `WriteToTerminalParams`
-  - [x] `ReadTerminalOutputParams`
-  - [x] `SendControlCharacterParams`
-  - [x] `ProcessInfo` e `ProcessMetrics`
-- [x] Implementar traits de serialização (serde derives presentes)
-- [ ] Adicionar validação de tipos (próximo passo: validações mais rígidas)
+4) Tests de integração macOS (médio prazo)
+   - Tests condicionados a `target_os = "macos"` já existem; mantê-los e limpá-los:
+     - `roundtrip_single_line_escape_and_return`
+     - `roundtrip_multiline_escape_and_return`
+     - `osascript_with_timeout_times_out`
+   - Adicionar verificações que somente rodem se `osascript` estiver presente e, quando necessário, verificar presença de iTerm2 (`pgrep -x iTerm2`) para testes que realmente escrevem em iTerm2.
+   - Documentar pré-requisitos: macOS, `osascript` disponível (padrão), iTerm2 (opcional), permissões de Acessibilidade (quando escrever diretamente em iTerm2 via GUI automation).
 
-### ✅ 1.5 Servidor Principal
-- [x] Adaptar `main.rs` do rs_filesystem (entry com clap/log)
-- [x] Configurar roteador com ferramentas iTerm (registro via `mcp::tools`)
-- [x] Implementar logging específico (tracing/tracing-subscriber configurado)
-- [ ] Adicionar tratamento de sinais macOS (a implementar)
-- [x] Configurar CLI com comandos de diagnóstico (clap já presente)
+5) CI Strategy (médio prazo)
+   - Linux CI:
+     - Rodar todos os unit tests com `MockOsascriptRunner`.
+     - Cobertura de código completa sobre lógica de escaping, construção de scripts e erros.
+   - macOS CI (opcional/separado):
+     - Job runner macOS executa testes marcados `#[cfg(target_os = "macos")]`.
+     - Executar integração com `SystemOsascriptRunner`. Se possível, adicionar job manual/opt-in para testes que interajam com iTerm2 (pede permissão).
+   - Scripts de CI:
+     - Adicionar passo para ignorar/condicionar testes que exigem iTerm2 em runners que não são macOS.
 
----
+6) Extração e refactor (médio prazo)
+   - Se ainda não feito, mover `applescript` do `mod.rs` para `applescript.rs` (feito em implementação atual).
+   - Atualizar `iterm/mod.rs` para `mod applescript; pub use applescript::{...}`.
+   - Remover warnings (unused imports, derives incompatíveis com trait objects). Em particular:
+     - Não derive `Debug` em structs que contenham `Arc<dyn Trait>` sem `Debug` bound; ou use `#[derive(Debug)]` com fields excluded.
 
-## 🍎 FASE 2: AppleScript Integration
+7) Documentação e guia de contribuição (curto prazo)
+   - Atualizar `docs/planejamento/03-plano-implementacao.md` (este arquivo).
+   - Criar `docs/planejamento/05-planejamento-testes.md` (plano de testes; cobertura / CI) — já presente parcialmente.
+   - Escrever guia rápido para configurar ambiente macOS para testes E2E (permissões, pgrep, iTerm2).
 
-### ✅ 2.1 Command Executor Base
-- [ ] Criar `src/mcp/iterm/command_executor.rs`
-- [ ] Implementar struct `CommandExecutor`
-- [ ] Adicionar método base `execute_command`
-- [ ] Configurar timeout e retry logic
-- [ ] Implementar logging de comandos
+Comandos úteis para desenvolvimento e verificação
+------------------------------------------------
+- Rodar toda suíte de testes:
+  cd rust/rs_iterm
+  cargo test
 
-### ✅ 2.2 AppleScript Wrapper
-- [ ] Criar `src/mcp/iterm/applescript.rs`
-- [ ] Implementar wrapper para `osascript`
-- [ ] Adicionar validação de iTerm2 availability
-- [ ] Implementar error mapping robusto
-- [ ] Adicionar timeout configurável
+- Rodar apenas testes macOS (local mac):
+  cargo test --tests -- --nocapture
 
-### ✅ 2.3 String Escaping
-- [ ] Implementar escape para strings simples
-- [ ] Adicionar suporte a caracteres especiais
-- [ ] Tratar aspas e backslashes
-- [ ] Validar encoding UTF-8
-- [ ] Testes unitários para edge cases
+- Rodar teste específico:
+  cargo test --test integration_applescript roundtrip_single_line_escape_and_return -- --nocapture
 
-### ✅ 2.4 Multiline Support
-- [ ] Implementar parsing de strings multilinhas
-- [ ] Criar concatenação AppleScript segura
-- [ ] Adicionar escape específico para newlines
-- [ ] Otimizar performance para textos grandes
-- [ ] Validar comportamento com diferentes encodings
+- Executar cargo fmt & clippy:
+  cargo fmt
+  cargo clippy -- -D warnings
 
-### ✅ 2.5 Error Handling
-- [ ] Mapear erros do AppleScript para Rust
-- [ ] Implementar retry logic para falhas temporárias
-- [ ] Adicionar diagnóstico de conectividade iTerm
-- [ ] Criar error types específicos
-- [ ] Logging estruturado de erros
+Critérios de aceite
+-------------------
+- `applescript` separado em `src/mcp/iterm/applescript.rs` e bem documentado.
+- `CommandExecutor` possui injeção de runner e possui testes unitários que usam `MockOsascriptRunner`.
+- Unit tests rodando no CI Linux usando mock runner.
+- Tests de integração macOS existentes funcionam em runner macOS.
+- Documentação (README / planning) atualizada com instruções de execução e CI strategy.
 
----
+Plano de entregas (PRs pequenos)
+-------------------------------
+- PR1 (pequeno): mover/extrair `applescript` para arquivo próprio e exportar os tipos (escape, osascript_with_timeout, OsascriptRunner, System/Mock).
+- PR2 (médio): adaptar `CommandExecutor` para injeção de runner + adicionar testes unitários com mock.
+- PR3 (médio): configurar CI para rodar unit tests com mock runner; definir job macOS opcional para integrações.
+- PR4 (opcional): adicionar testes E2E que exercitem iTerm2 em runner macOS com instruções de permissão.
 
-## 🔧 FASE 3: Core Tools Implementation
+Riscos e mitigação
+------------------
+- Dependência do macOS: mitigar com mocks para CI e separar jobs macOS.
+- Permissões iTerm2/Acessibilidade: documentar e instruir o usuário a habilitar quando necessário.
+- Diferenças de line endings: normalização centralizada em `osascript_with_timeout`.
+- Injeção de runner: cuidar para não expor internals sensíveis na API pública e documentar a maneira correta de usar mocks.
 
-### ✅ 3.1 write_to_terminal
-- [x] Implementar handler `write_to_terminal` (registrado em `mcp::tools`)
-- [x] Integrar com CommandExecutor (stub presente em `mcp::iterm`)
-- [x] Adicionar validação de parâmetros (básica via serde + schema)
-- [ ] Implementar tracking de execução (planejado)
-- [x] Retornar informações de resultado (MCP response shape definido)
+Próximos passos imediatos (no próximo ciclo)
+--------------------------------------------
+1. Corrigir o derive `Debug` em `CommandExecutor` para evitar erro de compilação com `Arc<dyn OsascriptRunner>` (remover derive ou usar `#[allow(dead_code)]` temporário).
+2. Adicionar testes unitários do `CommandExecutor` usando `MockOsascriptRunner`.
+3. Commitar PR1/PR2 conforme plano e abrir revisão.
+4. Atualizar `docs/planejamento/05-planejamento-testes.md` com estratégia CI detalhada (mock-based on Linux, macOS job for integration).
+5. Se preferir, eu implemento o passo 1 e 2 agora: remover derive Debug ou adicionar Debug impl personalizado, e criar testes unitários do `CommandExecutor` com mock runner.
 
-### ✅ 3.2 Execution Tracking
-- [ ] Implementar polling de status iTerm
-- [ ] Adicionar detecção de conclusão de comando
-- [ ] Criar métricas de tempo de execução
-- [ ] Implementar timeout configurável
-- [ ] Logging de performance
-
-### ✅ 3.3 read_terminal_output
-- [x] Implementar handler `read_terminal_output` (registrado em `mcp::tools`)
-- [x] Integrar com TTY Output Reader (stub `TtyReader` presente)
-- [ ] Adicionar filtragem por número de linhas (próximo passo: preencher leitura real)
-- [ ] Implementar cache inteligente
-- [ ] Otimizar para buffers grandes
-
-### ✅ 3.4 TTY Output Reader
-- [x] Criar `src/mcp/iterm/tty_reader.rs` (stub dentro de `iterm/mod.rs`)
-- [ ] Implementar leitura completa do buffer (a implementar)
-- [ ] Adicionar parsing de conteúdo do terminal
-- [ ] Implementar filtragem eficiente
-- [ ] Otimizar memory usage
-
-### ✅ 3.5 send_control_character
-- [x] Implementar handler `send_control_character` (registrado em `mcp::tools`)
-- [x] Criar mapeamento de caracteres de controle (básico em utilities + stub de envio)
-- [ ] Adicionar suporte a sequências especiais (planejado)
-- [x] Validar códigos ASCII (validação básica presente)
-- [ ] Implementar casos especiais (Escape, telnet)
-
----
-
-## 📊 FASE 4: Process Management
-
-### ✅ 4.1 Process Detection
-- [ ] Criar `src/mcp/iterm/process_tracker.rs`
-- [ ] Implementar detecção de processos ativos
-- [ ] Adicionar parsing de output `ps`
-- [ ] Implementar árvore de processos
-- [ ] Otimizar queries do sistema
-
-### ✅ 4.2 TTY Management
-- [ ] Implementar detecção de TTY path
-- [ ] Adicionar validação de TTY existence
-- [ ] Criar helpers para TTY operations
-- [ ] Implementar monitoring de estado
-- [ ] Adicionar error recovery
-
-### ✅ 4.3 Resource Monitoring
-- [ ] Implementar coleta de métricas CPU
-- [ ] Adicionar monitoring de memória
-- [ ] Criar agregação de recursos
-- [ ] Implementar thresholds configuráveis
-- [ ] Otimizar frequency de polling
-
-### ✅ 4.4 Environment Detection
-- [ ] Implementar detecção de REPLs
-- [ ] Adicionar reconhecimento de Rails console
-- [ ] Criar detection de package managers
-- [ ] Implementar context awareness
-- [ ] Adicionar heurísticas inteligentes
-
-### ✅ 4.5 Process Scoring
-- [ ] Implementar algoritmo de scoring
-- [ ] Adicionar weight factors configuráveis
-- [ ] Criar ranking de processos
-- [ ] Implementar tie-breaking logic
-- [ ] Otimizar performance do algoritmo
-
----
-
-## 🧪 FASE 5: Testing e Refinamento
-
-### ✅ 5.1 Unit Tests
-- [ ] Criar testes para CommandExecutor
-- [ ] Adicionar testes para AppleScript wrapper
-- [ ] Implementar testes para TTY reader
-- [ ] Criar mocks para process tracking
-- [x] Adicionar testes de string escaping (teste inicial implementado em `src/mcp/tests/basic_tests.rs`)
-
-### ✅ 5.2 Integration Tests
-- [ ] Criar testes end-to-end com iTerm
-- [ ] Implementar cenários reais de uso
-- [ ] Adicionar testes de concorrência
-- [ ] Criar testes de timeout
-- [ ] Validar comportamento com comandos longos
-
-### ✅ 5.3 Performance Tests
-- [ ] Implementar benchmarks de latência
-- [ ] Crear testes de throughput
-- [ ] Adicionar profiling de memória
-- [ ] Otimizar hot paths
-- [ ] Validar overhead vs TypeScript
-
-### ✅ 5.4 Error Scenarios
-- [ ] Testar falhas de conectividade iTerm
-- [ ] Implementar recovery de erros
-- [ ] Adicionar testes de edge cases
-- [ ] Validar handling de comandos inválidos
-- [ ] Testar behavior com TTY inexistente
-
-### ✅ 5.5 Documentation
-- [ ] Documentar APIs públicas
-- [ ] Criar guia de instalação
-- [ ] Adicionar exemplos de uso
-- [ ] Documentar troubleshooting
-- [ ] Criar migration guide do TypeScript
-
----
-
-## 🚀 FASE 6: Optimização e Deploy
-
-### ✅ 6.1 Performance Optimization
-- [ ] Profiling completo da aplicação
-- [ ] Otimizar alocações de memória
-- [ ] Reduzir syscalls desnecessárias
-- [ ] Implementar caching inteligente
-- [ ] Otimizar serialização JSON
-
-### ✅ 6.2 Memory Management
-- [ ] Auditoria de memory leaks
-- [ ] Otimizar lifetime de strings
-- [ ] Implementar memory pooling
-- [ ] Reduzir fragmentation
-- [ ] Validar memory safety
-
-### ✅ 6.3 Binary Optimization
-- [ ] Configurar release profile
-- [ ] Habilitar LTO (Link Time Optimization)
-- [ ] Otimizar size vs performance
-- [ ] Strip debug symbols
-- [ ] Validar startup time
-
-### ✅ 6.4 Platform Testing
-- [ ] Testar em diferentes versões macOS
-- [ ] Validar compatibilidade iTerm2
-- [ ] Testar em hardware variado
-- [ ] Verificar system requirements
-- [ ] Documentar limitations
-
-### ✅ 6.5 Release Packaging
-- [ ] Configurar CI/CD pipeline
-- [ ] Criar scripts de build automatizado
-- [ ] Implementar versioning semântico
-- [ ] Criar release notes
-- [ ] Preparar distribuição binária
-
----
-
-## 📈 Métricas de Sucesso
-
-### Performance Targets
-- [ ] **Latência**: < 50ms para comandos simples
-- [ ] **Memory**: < 10MB RAM baseline
-- [ ] **Startup**: < 100ms cold start
-- [ ] **Throughput**: > 100 comandos/segundo
-
-### Quality Targets
-- [ ] **Test Coverage**: > 85%
-- [ ] **Documentation**: 100% APIs públicas
-- [ ] **Error Handling**: 100% code paths
-- [ ] **Memory Safety**: Zero unsafe code
-
-### Compatibility Targets
-- [ ] **Functional Parity**: 100% com TypeScript
-- [ ] **API Compatibility**: 100% MCP compliance
-- [ ] **Platform Support**: macOS 10.15+
-- [ ] **iTerm Support**: iTerm2 3.4+
-
----
-
-## 🔄 Cronograma Estimado
-
-| Fase | Duração | Dependências | Output |
-|------|---------|--------------|---------|
-| Fase 1 | 2-3 dias | Nenhuma | Estrutura base funcional |
-| Fase 2 | 3-4 dias | Fase 1 | AppleScript integration |
-| Fase 3 | 4-5 dias | Fase 2 | Core tools funcionais |
-| Fase 4 | 3-4 dias | Fase 3 | Process management |
-| Fase 5 | 3-4 dias | Fase 4 | Suite de testes completa |
-| Fase 6 | 2-3 dias | Fase 5 | Release candidate |
-
-**Total Estimado**: 17-23 dias de desenvolvimento
-
----
-
-## 🎯 Próximos Passos
-
-1. **Começar Fase 1**: Setup e estrutura base
-2. **Validar ambiente**: Rust toolchain + iTerm2
-3. **Criar repositório**: Git setup e initial commit
-4. **Implementar incrementalmente**: Uma fase por vez
-5. **Testar continuamente**: Validação em cada etapa
-
-Este plano garante uma implementação robusta, performática e maintível do iTerm MCP em Rust, superando a versão TypeScript original.
+Fim do plano de implementação.
