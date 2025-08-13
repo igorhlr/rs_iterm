@@ -1,74 +1,14 @@
-use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use tokio::io::AsyncReadExt;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio::sync::oneshot;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
-use crate::mcp::tools::{register_tools, ToolHandler};
-use crate::mcp::types::ToolDefinition;
+use crate::mcp::router::Router;
+use crate::mcp::tools::register_tools;
 use crate::mcp::utilities::check_iterm_availability;
-
-/// Simple local Router replacement to avoid depending on external `rpc-router` API.
-///
-/// The original code used `rpc-router::Router`. To keep the project buildable
-/// and allow incremental development, we provide a minimal Router with the
-/// interface used by this module:
-/// - `Router::new()`
-/// - `register_tool(name, definition, handler)`
-/// - `handle_connection(socket)` async method
-///
-/// The implementation is intentionally simple: it stores the registered tools
-/// and `handle_connection` reads a small amount from the socket and returns.
-/// Later we can extend it to perform a full MCP protocol handling.
-struct Router {
-    tools: Mutex<HashMap<String, (ToolDefinition, ToolHandler)>>,
-}
-
-impl Router {
-    /// Create a new Router instance.
-    pub fn new() -> Self {
-        Router {
-            tools: Mutex::new(HashMap::new()),
-        }
-    }
-
-    /// Register a tool by name with its definition and handler.
-    pub fn register_tool(&self, name: String, definition: ToolDefinition, handler: ToolHandler) {
-        let mut guard = self.tools.lock().unwrap();
-        guard.insert(name, (definition, handler));
-    }
-
-    /// Async handler for an incoming TCP connection.
-    ///
-    /// Current stub: read a small buffer (non-blocking) and log activity.
-    /// Real implementation should implement the MCP framing and dispatch to tools.
-    pub async fn handle_connection(self: Arc<Self>, mut socket: TcpStream) -> Result<()> {
-        let mut buf = [0u8; 1024];
-
-        // Try to read a small chunk with a short timeout-like behavior by awaiting once.
-        match socket.read(&mut buf).await {
-            Ok(n) => {
-                debug!("Router: received {} bytes from connection", n);
-                // In this stub we simply ignore payload. A real handler would parse MCP messages
-                // and call the registered tool handlers accordingly.
-            }
-            Err(e) => {
-                error!("Router: failed to read from connection: {}", e);
-                // Return error so caller can log it
-                return Err(anyhow::anyhow!(e));
-            }
-        }
-
-        // Optionally write a simple acknowledgement (not part of MCP) - commented out for now
-        // let _ = socket.write_all(b"ok\n").await;
-
-        Ok(())
-    }
-}
 
 /// Inicia o servidor MCP para o iTerm
 pub async fn start_server(address: String, port: u16) -> Result<oneshot::Receiver<()>> {
@@ -96,7 +36,7 @@ pub async fn start_server(address: String, port: u16) -> Result<oneshot::Receive
     let tools = register_tools();
     info!("Ferramentas registradas: {}", tools.len());
 
-    // Cria o roteador MCP local e registra as ferramentas
+    // Cria o roteador MCP e registra as ferramentas
     let router = Arc::new(Router::new());
     for (name, (definition, handler)) in tools {
         info!("Registrando ferramenta: {}", name);
@@ -135,3 +75,4 @@ pub async fn start_server(address: String, port: u16) -> Result<oneshot::Receive
 
     Ok(shutdown_rx)
 }
+
