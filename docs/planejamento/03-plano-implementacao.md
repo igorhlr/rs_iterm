@@ -42,12 +42,20 @@ Resumo do Estado Atual
    - Serialização de respostas
    - Tratamento de erros detalhado
 
-6. **Testes**
+6. **Servidor MCP** ✅ FUNCIONANDO!
+   - Servidor TCP completo e operacional
+   - Detecção do iTerm2 via AppleScript
+   - Processamento de mensagens MCP
+   - write_to_terminal totalmente funcional
+   - Logs detalhados e estatísticas
+   - Health checks implementados
+
+7. **Testes**
    - Unit tests para `escape` e mock runner
    - Testes de integração macOS-only para o runner system
    - Testes para TtyReader e ControlCharacterSender
    - Testes para o Router MCP
-   - Total de testes abrangendo os casos principais
+   - Total de 28 testes passando
 
 ### 🔄 Componentes Parcialmente Implementados
 1. **Server Enhancements**
