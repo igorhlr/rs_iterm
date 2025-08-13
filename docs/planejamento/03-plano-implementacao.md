@@ -96,22 +96,21 @@ Plano detalhado de implementação (próximos passos)
    - [x] Usar `letter_to_control_char` para mapeamento correto
    - [x] Adicionar testes unitários e de integração
 
-### Fase 2: Implementação do Protocolo MCP (Prioridade Média) - CONCLUÍDO
+### Fase 2: Melhorias no TTY Operations (Prioridade Alta)
 
-1. **Router Completo**
-   - [x] Implementar parsing de mensagens MCP JSON
-   - [x] Implementar roteamento para handlers corretos
-   - [x] Implementar serialização de respostas
-   - [x] Adicionar tratamento de erros e logging detalhado
-   - [x] Adicionar testes de integração para fluxo completo
+1. **TTY Reader com Fallback AppleScript**
+   - [ ] Implementar leitura via AppleScript quando TTY não disponível
+   - [ ] Usar comando `tell application "iTerm2" to tell current session of current window to text`
+   - [ ] Manter compatibilidade com método TTY atual
+   - [ ] Adicionar testes para ambos os métodos
 
-2. **Server Enhancements**
-   - [ ] Implementar gerenciamento de conexões mais robusto
-   - [ ] Adicionar graceful shutdown
-   - [ ] Implementar health checks
-   - [ ] Adicionar métricas básicas (conexões, latência)
+2. **Control Character Sender com Fallback AppleScript**
+   - [ ] Implementar envio via AppleScript quando TTY não disponível
+   - [ ] Usar comando apropriado do iTerm2 para enviar control chars
+   - [ ] Manter compatibilidade com método TTY atual
+   - [ ] Adicionar testes para ambos os métodos
 
-### Fase 3: Process Tracker e Refinamentos (Prioridade Baixa)
+### Fase 3: Process Tracker e Refinamentos (Prioridade Média)
 
 1. **Process Tracker**
    - [ ] Implementar tracking de processos no TTY via `ps`
