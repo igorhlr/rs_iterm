@@ -204,7 +204,9 @@ Status atual
 - ✅ Plano de implementação atualizado
 - ✅ TtyReader e ControlCharacterSender implementados e testados
 - ✅ Router MCP implementado e testado
+- ✅ **Servidor MCP funcionando e operacional!**
+- ✅ write_to_terminal totalmente funcional via protocolo MCP
 - ✅ Ferramentas MCP registradas e funcionais
-- 🔄 Servidor básico implementado, faltam melhorias
+- ⚠️ TTY operations precisam de fallback para AppleScript
 - ❌ Process Tracker pendente
 
