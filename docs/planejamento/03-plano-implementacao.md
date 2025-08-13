@@ -58,10 +58,10 @@ Resumo do Estado Atual
    - Total de 28 testes passando
 
 ### 🔄 Componentes Parcialmente Implementados
-1. **Server Enhancements**
-   - Implementação básica de servidor TCP
-   - Registro de ferramentas
-   - Falta implementar gerenciamento robusto de conexões e shutdown
+1. **TTY Operations (quando sem TTY real)**
+   - read_terminal_output funciona apenas com TTY real
+   - send_control_character funciona apenas com TTY real
+   - Necessário implementar fallback via AppleScript
 
 ### ❌ Componentes Pendentes
 1. **Process Tracker** - Não implementado
