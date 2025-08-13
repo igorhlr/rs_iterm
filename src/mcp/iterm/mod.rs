@@ -315,6 +315,16 @@ pub mod tty_reader {
         pub fn get_tty_path(&self) -> Option<&str> {
             self.tty_path.as_deref()
         }
+        
+        /// Get the current buffer size.
+        pub fn get_buffer_size(&self) -> usize {
+            self.buffer_size
+        }
+        
+        /// Get whether ANSI stripping is enabled.
+        pub fn is_strip_ansi_enabled(&self) -> bool {
+            self.strip_ansi
+        }
     }
 }
 
