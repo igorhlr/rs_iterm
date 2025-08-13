@@ -53,34 +53,193 @@ pub mod control_char {
 
 pub mod tty_reader {
     use super::*;
-    use std::time::Duration;
-    use tokio::time::sleep;
+    use anyhow::{Context, Result};
+    use regex::Regex;
+    use std::fs::File;
+    use std::io::Read;
+    use std::path::Path;
+    use tracing::{debug, error, info, warn};
 
-    /// Minimal TTY reader stub.
+    /// TTY reader implementation for reading terminal output.
     ///
-    /// The production version should open the active TTY, read buffers, strip ANSI codes when needed,
-    /// and provide efficient line-oriented reads. This stub returns an empty string for now.
-    #[derive(Debug, Default)]
+    /// Provides functionality to read from the active TTY device,
+    /// strip ANSI escape sequences, and extract the requested number of lines.
+    #[derive(Debug)]
     pub struct TtyReader {
-        // Placeholder for cached state, file handles, etc.
+        /// Path to the TTY device (e.g., "/dev/ttys001")
+        tty_path: Option<String>,
+        /// Buffer size for reading from TTY (in bytes)
+        buffer_size: usize,
+        /// Whether to strip ANSI escape sequences from output
+        strip_ansi: bool,
+        /// Compiled regex for stripping ANSI codes (lazy initialized)
+        ansi_regex: Option<Regex>,
+    }
+
+    impl Default for TtyReader {
+        fn default() -> Self {
+            Self::new()
+        }
     }
 
     impl TtyReader {
-        /// Create a new TtyReader instance.
+        /// Create a new TtyReader instance with default settings.
         pub fn new() -> Self {
             debug!("TtyReader::new()");
-            TtyReader {}
+            TtyReader {
+                tty_path: None,
+                buffer_size: 8192, // 8KB buffer by default
+                strip_ansi: true,  // Strip ANSI by default
+                ansi_regex: None,
+            }
+        }
+
+        /// Create a new TtyReader with custom settings.
+        pub fn new_with_config(buffer_size: usize, strip_ansi: bool) -> Self {
+            debug!("TtyReader::new_with_config(buffer_size={}, strip_ansi={})", buffer_size, strip_ansi);
+            TtyReader {
+                tty_path: None,
+                buffer_size,
+                strip_ansi,
+                ansi_regex: None,
+            }
+        }
+
+        /// Initialize the TTY reader by finding the active TTY.
+        pub async fn initialize(&mut self) -> Result<()> {
+            info!("Initializing TtyReader");
+            
+            // Get the active TTY path using the utility function
+            match crate::mcp::utilities::get_active_tty() {
+                Ok(path) => {
+                    debug!("Found active TTY: {}", path);
+                    self.tty_path = Some(path);
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("Failed to get active TTY: {}", e);
+                    Err(e.context("TtyReader initialization failed"))
+                }
+            }
         }
 
         /// Read `lines` lines from the terminal output buffer.
         ///
-        /// Returns a single string containing the requested lines separated by '\n'.
-        /// Current stub returns an empty string (simulate async).
-        pub async fn read_lines(&mut self, _lines: usize) -> Result<String> {
-            info!("(stub) TtyReader::read_lines requested lines={}", _lines);
-            // Simulate async latency
-            sleep(Duration::from_millis(10)).await;
-            Ok(String::new())
+        /// Returns a string containing the requested lines separated by '\n'.
+        /// Will initialize if not already initialized.
+        pub async fn read_lines(&mut self, lines: usize) -> Result<String> {
+            info!("Reading {} lines from terminal output", lines);
+            
+            // Ensure we have a TTY path
+            if self.tty_path.is_none() {
+                debug!("No TTY path set, initializing");
+                self.initialize().await?;
+            }
+            
+            let tty_path = match &self.tty_path {
+                Some(path) => path,
+                None => return Err(anyhow::anyhow!("No active TTY found")),
+            };
+            
+            // Check if TTY path exists
+            if !Path::new(tty_path).exists() {
+                return Err(anyhow::anyhow!("TTY path does not exist: {}", tty_path));
+            }
+            
+            // Read from the TTY file
+            let mut buffer = vec![0u8; self.buffer_size];
+            let read_result = self.read_from_tty(tty_path, &mut buffer);
+            
+            match read_result {
+                Ok(bytes_read) => {
+                    debug!("Read {} bytes from TTY", bytes_read);
+                    buffer.truncate(bytes_read);
+                    
+                    // Convert to string (lossy to handle invalid UTF-8)
+                    let mut content = String::from_utf8_lossy(&buffer).to_string();
+                    
+                    // Strip ANSI escape sequences if configured
+                    if self.strip_ansi {
+                        content = self.strip_ansi_codes(&content);
+                    }
+                    
+                    // Extract specified number of lines
+                    let extracted = self.extract_lines(&content, lines);
+                    
+                    Ok(extracted)
+                }
+                Err(e) => {
+                    error!("Failed to read from TTY: {}", e);
+                    Err(e)
+                }
+            }
+        }
+        
+        /// Read data from the TTY file into the provided buffer.
+        fn read_from_tty(&self, tty_path: &str, buffer: &mut [u8]) -> Result<usize> {
+            // Open the TTY device for reading
+            let mut file = File::open(tty_path)
+                .context(format!("Failed to open TTY device: {}", tty_path))?;
+            
+            // Read available data
+            let bytes_read = file.read(buffer)
+                .context("Failed to read from TTY")?;
+            
+            Ok(bytes_read)
+        }
+        
+        /// Strip ANSI escape sequences from a string.
+        fn strip_ansi_codes(&mut self, input: &str) -> String {
+            // Lazy initialize the regex
+            if self.ansi_regex.is_none() {
+                // This regex matches common ANSI escape sequences:
+                // - Color codes
+                // - Cursor movement
+                // - Screen clearing
+                // - Other control sequences
+                match Regex::new(r"\x1B\[[0-9;]*[a-zA-Z]") {
+                    Ok(regex) => self.ansi_regex = Some(regex),
+                    Err(e) => {
+                        error!("Failed to compile ANSI regex: {}", e);
+                        return input.to_string();
+                    }
+                }
+            }
+            
+            if let Some(regex) = &self.ansi_regex {
+                regex.replace_all(input, "").to_string()
+            } else {
+                input.to_string()
+            }
+        }
+        
+        /// Extract the last `n` lines from a string.
+        fn extract_lines(&self, input: &str, n: usize) -> String {
+            if n == 0 || input.is_empty() {
+                return String::new();
+            }
+            
+            let lines: Vec<&str> = input.lines().collect();
+            let start = if lines.len() > n { lines.len() - n } else { 0 };
+            
+            lines[start..].join("\n")
+        }
+        
+        /// Set whether to strip ANSI escape sequences.
+        pub fn set_strip_ansi(&mut self, strip_ansi: bool) {
+            debug!("Setting strip_ansi to {}", strip_ansi);
+            self.strip_ansi = strip_ansi;
+        }
+        
+        /// Set the buffer size for reading from TTY.
+        pub fn set_buffer_size(&mut self, buffer_size: usize) {
+            debug!("Setting buffer_size to {}", buffer_size);
+            self.buffer_size = buffer_size;
+        }
+        
+        /// Get the current TTY path.
+        pub fn get_tty_path(&self) -> Option<&str> {
+            self.tty_path.as_deref()
         }
     }
 }
@@ -95,7 +254,6 @@ pub mod command_executor {
     ///
     /// It accepts an `OsascriptRunner` so tests can inject a mock runner that
     /// does not call the system `osascript` binary.
-    #[derive(Debug)]
     pub struct CommandExecutor {
         runner: Arc<dyn OsascriptRunner>,
         // Additional config can be added here (default timeout, retries, etc).
