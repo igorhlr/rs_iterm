@@ -5,6 +5,7 @@
 #![cfg(test)]
 
 mod basic_tests;
+mod router_tests;
 
 #[cfg(target_os = "macos")]
 mod integration_applescript;
