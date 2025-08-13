@@ -195,7 +195,7 @@ impl Router {
             Ok(result) => {
                 // Cria resposta de sucesso
                 let response = McpResponse {
-                    id: request.id,
+                    id: request.id.clone(),
                     response_type: "response".to_string(),
                     result: Some(result),
                     error: None,
