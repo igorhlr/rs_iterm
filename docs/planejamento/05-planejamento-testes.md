@@ -63,48 +63,48 @@
   - [ ] Mensagens de erro amigáveis
 
 ### 3. TTY Reader (`tty_reader.rs`) - PRIORIDADE ALTA
-- [ ] **Buffer Reading**
-  - [ ] Leitura completa do buffer
-  - [ ] Filtragem por número de linhas
-  - [ ] Handling de buffers vazios
-  - [ ] Buffers com caracteres especiais
+- [x] **Buffer Reading**
+  - [x] Leitura completa do buffer
+  - [x] Filtragem por número de linhas
+  - [x] Handling de buffers vazios
+  - [x] Buffers com caracteres especiais
 
-- [ ] **Content Parsing**
-  - [ ] Parsing de linhas
-  - [ ] Handling de ANSI codes
-  - [ ] Unicode support
-  - [ ] Large buffer handling
+- [x] **Content Parsing**
+  - [x] Parsing de linhas
+  - [x] Handling de ANSI codes
+  - [x] Unicode support
+  - [x] Large buffer handling
 
-- [ ] **Error Handling**
-  - [ ] TTY não disponível
-  - [ ] Permissões inadequadas
-  - [ ] Buffer overflow
-  - [ ] Falhas de leitura
+- [x] **Error Handling**
+  - [x] TTY não disponível
+  - [x] Permissões inadequadas
+  - [x] Buffer overflow
+  - [x] Falhas de leitura
 
-- [ ] **Initialization**
-  - [ ] Auto-detecção de TTY
-  - [ ] Fallback para TTYs alternativos
-  - [ ] Configuração de buffer size
-  - [ ] Re-inicialização após falhas
+- [x] **Initialization**
+  - [x] Auto-detecção de TTY
+  - [x] Fallback para TTYs alternativos
+  - [x] Configuração de buffer size
+  - [x] Re-inicialização após falhas
 
 ### 4. Control Characters (`control_char.rs`) - PRIORIDADE ALTA
-- [ ] **Character Mapping**
-  - [x] A-Z → Control codes 1-26 (implementado mas não testado)
-  - [x] Casos especiais (ESC, telnet escape) (implementado mas não testado)
-  - [x] Validação de entrada (implementado mas não testado)
-  - [ ] Error cases
+- [x] **Character Mapping**
+  - [x] A-Z → Control codes 1-26 (implementado e testado)
+  - [x] Casos especiais (ESC, telnet escape) (implementado e testado)
+  - [x] Validação de entrada (implementado e testado)
+  - [x] Error cases
 
-- [ ] **ASCII Validation**
-  - [ ] Códigos válidos (0-31)
-  - [ ] Códigos inválidos
-  - [ ] Boundary conditions
-  - [ ] Special sequences
+- [x] **ASCII Validation**
+  - [x] Códigos válidos (0-31)
+  - [x] Códigos inválidos
+  - [x] Boundary conditions
+  - [x] Special sequences
 
-- [ ] **TTY Interaction**
-  - [ ] Escrita no TTY
-  - [ ] Permissões de acesso
-  - [ ] Verificação de resposta
-  - [ ] Recuperação de falhas
+- [x] **TTY Interaction**
+  - [x] Escrita no TTY
+  - [x] Permissões de acesso
+  - [x] Verificação de resposta
+  - [x] Recuperação de falhas
 
 ### 5. Process Tracker (`process_tracker.rs`)
 - [ ] **Process Detection**
