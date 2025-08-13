@@ -126,24 +126,32 @@ Plano detalhado de implementação (próximos passos)
 
 Comandos úteis para desenvolvimento e verificação
 ------------------------------------------------
-- Rodar toda suíte de testes:
-  ```
+- Compilar e executar o servidor:
+  ```bash
   cd /Users/user0/local-mcp-servers/i-term/rust/rs_iterm
+  cargo build --release
+  ./target/release/rs_iterm --log-level debug --port 3333
+  ```
+
+- Testar o servidor MCP:
+  ```bash
+  # write_to_terminal (funcionando!)
+  echo '{"id":"1","function":"iterm-mcp:write_to_terminal","arguments":{"command":"echo Hello MCP!"}}' | nc localhost 3333
+  
+  # read_terminal_output (requer TTY)
+  echo '{"id":"2","function":"iterm-mcp:read_terminal_output","arguments":{"lines_of_output":5}}' | nc localhost 3333
+  
+  # send_control_character (requer TTY)
+  echo '{"id":"3","function":"iterm-mcp:send_control_character","arguments":{"letter":"C"}}' | nc localhost 3333
+  ```
+
+- Rodar toda suíte de testes:
+  ```bash
   cargo test
   ```
 
-- Rodar apenas testes macOS (local mac):
-  ```
-  cargo test --tests -- --nocapture
-  ```
-
-- Rodar teste específico:
-  ```
-  cargo test --test router_tests test_router_process_message -- --nocapture
-  ```
-
 - Executar cargo fmt & clippy:
-  ```
+  ```bash
   cargo fmt
   cargo clippy -- -D warnings
   ```
@@ -153,7 +161,9 @@ Critérios de aceite
 - ✅ TtyReader implementado e funcional, lendo corretamente de TTYs reais
 - ✅ ControlCharacterSender implementado e enviando caracteres de controle para o TTY
 - ✅ Router processando mensagens MCP corretamente
-- ✅ Todos os testes passando (incluindo novos testes para funcionalidades adicionadas)
+- ✅ Servidor MCP funcionando e processando comandos
+- ✅ write_to_terminal totalmente operacional
+- ✅ Todos os testes passando (28 testes)
 - ✅ Documentação atualizada com instruções de uso e teste
 
 Riscos e mitigação
