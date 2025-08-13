@@ -16,37 +16,111 @@ use tracing::{debug, info};
 pub mod applescript;
 pub mod control_char {
     use super::*;
-    use std::time::Duration;
-    use tokio::time::sleep;
+    use anyhow::{Context, Result};
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::path::Path;
+    use tracing::{debug, error, info, warn};
 
-    /// Minimal control-character sender stub.
+    /// Control character sender for sending control characters to the terminal.
     ///
-    /// The real implementation should map letters to control codes and write to the TTY / session.
-    #[derive(Debug, Default)]
+    /// Maps letters to control codes and writes them to the TTY device.
+    #[derive(Debug)]
     pub struct ControlCharacterSender {
-        // Placeholder for internal state (tty handle, config, etc).
+        /// Path to the TTY device (e.g., "/dev/ttys001")
+        tty_path: Option<String>,
+    }
+
+    impl Default for ControlCharacterSender {
+        fn default() -> Self {
+            Self::new()
+        }
     }
 
     impl ControlCharacterSender {
         /// Create a new control character sender.
         pub fn new() -> Self {
             debug!("ControlCharacterSender::new()");
-            ControlCharacterSender {}
+            ControlCharacterSender {
+                tty_path: None,
+            }
+        }
+
+        /// Initialize the sender by finding the active TTY.
+        pub async fn initialize(&mut self) -> Result<()> {
+            info!("Initializing ControlCharacterSender");
+            
+            // Get the active TTY path using the utility function
+            match crate::mcp::utilities::get_active_tty() {
+                Ok(path) => {
+                    debug!("Found active TTY: {}", path);
+                    self.tty_path = Some(path);
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("Failed to get active TTY: {}", e);
+                    Err(e.context("ControlCharacterSender initialization failed"))
+                }
+            }
         }
 
         /// Send a control character (example: "C" -> Ctrl-C).
         ///
-        /// This stub validates basic input shape and returns Ok.
+        /// Maps the letter to a control character code and writes it to the TTY.
         pub async fn send_control_character(&mut self, letter: &str) -> Result<()> {
-            info!("(stub) send_control_character: {:?}", letter);
+            info!("Sending control character: {}", letter);
 
+            // Validate input
             if letter.is_empty() {
-                return Err(anyhow::anyhow!("letter must not be empty"));
+                return Err(anyhow::anyhow!("Control character must not be empty"));
             }
 
-            // Simulate async work (in real code, write to pty / send escape sequences)
-            sleep(Duration::from_millis(5)).await;
+            // Convert letter to control code using the utility function
+            let ctrl_code = crate::mcp::utilities::letter_to_control_char(letter)
+                .context(format!("Invalid control character: {}", letter))?;
+
+            debug!("Mapped '{}' to control code: {}", letter, ctrl_code);
+
+            // Ensure we have a TTY path
+            if self.tty_path.is_none() {
+                debug!("No TTY path set, initializing");
+                self.initialize().await?;
+            }
+            
+            let tty_path = match &self.tty_path {
+                Some(path) => path,
+                None => return Err(anyhow::anyhow!("No active TTY found")),
+            };
+            
+            // Check if TTY path exists
+            if !Path::new(tty_path).exists() {
+                return Err(anyhow::anyhow!("TTY path does not exist: {}", tty_path));
+            }
+            
+            // Write the control character to the TTY
+            self.write_to_tty(tty_path, ctrl_code)?;
+            
             Ok(())
+        }
+        
+        /// Write a control character to the TTY file.
+        fn write_to_tty(&self, tty_path: &str, ctrl_code: u8) -> Result<()> {
+            // Open the TTY device for writing
+            let mut file = OpenOptions::new()
+                .write(true)
+                .open(tty_path)
+                .context(format!("Failed to open TTY device: {}", tty_path))?;
+            
+            // Write the control character to the TTY
+            file.write_all(&[ctrl_code])
+                .context("Failed to write control character to TTY")?;
+            
+            Ok(())
+        }
+        
+        /// Get the current TTY path.
+        pub fn get_tty_path(&self) -> Option<&str> {
+            self.tty_path.as_deref()
         }
     }
 }
