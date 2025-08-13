@@ -126,6 +126,31 @@
   - [x] Tool definitions
   - [ ] Serialization/deserialization completa
 
+### 7. Router MCP (`router.rs`) - PRIORIDADE ALTA - IMPLEMENTADO
+- [x] **Message Parsing**
+  - [x] Parsing de JSON válido
+  - [x] Handling de JSON inválido
+  - [x] Validação de estrutura de mensagem
+  - [x] Extração de campos (id, function, arguments)
+
+- [x] **Message Routing**
+  - [x] Roteamento para handler correto
+  - [x] Handling de funções desconhecidas
+  - [x] Propagação de argumentos
+  - [x] Validação de parâmetros
+
+- [x] **Response Serialization**
+  - [x] Criação de resposta de sucesso
+  - [x] Criação de resposta de erro
+  - [x] Serialização para JSON
+  - [x] Handling de erros de serialização
+
+- [x] **Error Handling**
+  - [x] Códigos de erro padronizados
+  - [x] Mensagens de erro detalhadas
+  - [x] Propagação de erros do handler
+  - [x] Recuperação de falhas
+
 ---
 
 ## 🔗 Integration Tests (15%)
@@ -182,6 +207,19 @@
   - [ ] Network interruption
   - [ ] System overload
   - [ ] Permission changes
+
+### 5. Router MCP Integration
+- [x] **Message Processing**
+  - [x] Processamento de mensagens completas
+  - [x] Roteamento para ferramentas registradas
+  - [x] Retorno de respostas corretas
+  - [x] Handling de erros de protocolo
+
+- [x] **Tool Handler Integration**
+  - [x] Invocação de handlers
+  - [x] Passagem de parâmetros
+  - [x] Serialização de respostas
+  - [x] Handling de erros do handler
 
 ---
 
@@ -307,135 +345,148 @@ echo "backslash \\ e newline \n"
 
 ## 🎯 Próximos Testes a Implementar (Prioridade Alta)
 
-### TtyReader Tests
+### Router MCP Tests
 
-1. **Basic Unit Tests**
+1. **Message Parsing Tests**
    ```rust
    #[test]
-   fn test_tty_reader_extract_lines() {
-       let reader = TtyReader::new();
+   fn test_parse_valid_mcp_message() {
+       let router = Router::new();
        
-       // Test with more lines than requested
-       let input = "line1\nline2\nline3\nline4\nline5";
-       assert_eq!(reader.extract_lines(input, 3), "line3\nline4\nline5");
+       // Mensagem MCP válida
+       let message = r#"{"id":"test-id","function":"test:function","arguments":{"param1":"value1"}}"#;
        
-       // Test with fewer lines than requested
-       assert_eq!(reader.extract_lines(input, 10), input);
+       // Processar mensagem
+       let result = router.process_message(message);
        
-       // Test with empty input
-       assert_eq!(reader.extract_lines("", 5), "");
+       // Verificar processamento correto
+       assert!(result.is_ok());
        
-       // Test with zero lines requested
-       assert_eq!(reader.extract_lines(input, 0), "");
+       // Verificar conteúdo da resposta
+       let response = result.unwrap();
+       let json: serde_json::Value = serde_json::from_str(&response).unwrap();
+       
+       assert_eq!(json["id"], "test-id");
+       assert_eq!(json["type"], "error"); // Erro porque a função não existe
+       assert_eq!(json["error"]["code"], -32601); // Código para função não encontrada
    }
    
    #[test]
-   fn test_tty_reader_strip_ansi() {
-       let reader = TtyReader::new();
+   fn test_parse_invalid_json() {
+       let router = Router::new();
        
-       // Test with ANSI color codes
-       let input = "\x1B[31mRed Text\x1B[0m and \x1B[32mGreen Text\x1B[0m";
-       assert_eq!(reader.strip_ansi_codes(input), "Red Text and Green Text");
+       // JSON inválido
+       let message = r#"{"id":"test-id","function":invalid json}"#;
        
-       // Test with cursor movement codes
-       let input = "Text with \x1B[1A\x1B[2Kmovement codes";
-       assert_eq!(reader.strip_ansi_codes(input), "Text with movement codes");
+       // Processar mensagem
+       let result = router.process_message(message);
        
-       // Test with no ANSI codes
-       let input = "Plain text without codes";
-       assert_eq!(reader.strip_ansi_codes(input), input);
+       // Verificar erro apropriado
+       assert!(result.is_ok());
+       
+       // Verificar conteúdo da resposta
+       let response = result.unwrap();
+       let json: serde_json::Value = serde_json::from_str(&response).unwrap();
+       
+       assert_eq!(json["type"], "error");
+       assert_eq!(json["error"]["code"], -32700); // Parse error
    }
    ```
 
-2. **Integration Tests (macOS only)**
-   ```rust
-   #[cfg(target_os = "macos")]
-   #[test]
-   async fn test_tty_reader_initialize_real() {
-       let mut reader = TtyReader::new();
-       let result = reader.initialize().await;
-       
-       assert!(result.is_ok(), "Initialize should succeed on macOS");
-       assert!(reader.tty_path.is_some(), "TTY path should be set");
-       
-       if let Some(path) = &reader.tty_path {
-           assert!(path.starts_with("/dev/"), "TTY path should start with /dev/");
-       }
-   }
-   
-   #[cfg(target_os = "macos")]
-   #[test]
-   async fn test_tty_reader_read_lines_real() {
-       let mut reader = TtyReader::new();
-       reader.initialize().await.expect("Initialize failed");
-       
-       // Write something to the terminal first
-       println!("TEST OUTPUT LINE 1");
-       println!("TEST OUTPUT LINE 2");
-       println!("TEST OUTPUT LINE 3");
-       
-       // Try to read it back
-       let result = reader.read_lines(2).await;
-       assert!(result.is_ok(), "Read lines should succeed");
-       
-       let content = result.unwrap();
-       assert!(content.contains("TEST OUTPUT LINE"), 
-              "Output should contain test string");
-   }
-   ```
-
-### ControlCharacterSender Tests
-
-1. **Basic Unit Tests**
+2. **Tool Routing Tests**
    ```rust
    #[test]
-   fn test_control_char_sender_validate_input() {
-       let mut sender = ControlCharacterSender::new();
+   fn test_route_to_registered_tool() {
+       let router = Router::new();
        
-       // Test with empty input (should fail)
-       let empty_result = tokio_test::block_on(sender.send_control_character(""));
-       assert!(empty_result.is_err(), "Empty input should fail");
+       // Registrar ferramenta mock
+       let tool_def = ToolDefinition {
+           name: "test:echo".to_string(),
+           description: "Echo test tool".to_string(),
+           parameters: Default::default(),
+       };
        
-       // Test with invalid input (should fail)
-       let invalid_result = tokio_test::block_on(sender.send_control_character("123"));
-       assert!(invalid_result.is_err(), "Multi-character input should fail");
+       // Handler que retorna os parâmetros recebidos
+       let handler = Arc::new(|params| {
+           Ok(json!({ "echo": params }))
+       });
        
-       // Test with invalid character (should fail)
-       let invalid_char_result = tokio_test::block_on(sender.send_control_character("9"));
-       assert!(invalid_char_result.is_err(), "Invalid control character should fail");
+       router.register_tool("test:echo".to_string(), tool_def, handler);
+       
+       // Mensagem para a ferramenta registrada
+       let message = r#"{"id":"test-id","function":"test:echo","arguments":{"test":"value"}}"#;
+       
+       // Processar mensagem
+       let result = router.process_message(message);
+       
+       // Verificar resposta
+       assert!(result.is_ok());
+       
+       // Verificar conteúdo da resposta
+       let response = result.unwrap();
+       let json: serde_json::Value = serde_json::from_str(&response).unwrap();
+       
+       assert_eq!(json["type"], "response");
+       assert_eq!(json["result"]["echo"]["test"], "value");
    }
    
    #[test]
-   fn test_letter_to_control_char_mapping() {
-       // Test A-Z mappings
-       assert_eq!(letter_to_control_char("A").unwrap(), 1);
-       assert_eq!(letter_to_control_char("Z").unwrap(), 26);
+   fn test_route_to_unknown_tool() {
+       let router = Router::new();
        
-       // Test case insensitivity
-       assert_eq!(letter_to_control_char("a").unwrap(), 1);
-       assert_eq!(letter_to_control_char("c").unwrap(), 3);
+       // Mensagem para ferramenta não registrada
+       let message = r#"{"id":"test-id","function":"unknown:tool","arguments":{}}"#;
        
-       // Test special characters
-       assert_eq!(letter_to_control_char("@").unwrap(), 0);  // NUL
-       assert_eq!(letter_to_control_char("[").unwrap(), 27); // ESC
-       assert_eq!(letter_to_control_char("]").unwrap(), 29); // GS
+       // Processar mensagem
+       let result = router.process_message(message);
+       
+       // Verificar erro apropriado
+       assert!(result.is_ok());
+       
+       // Verificar conteúdo da resposta
+       let response = result.unwrap();
+       let json: serde_json::Value = serde_json::from_str(&response).unwrap();
+       
+       assert_eq!(json["type"], "error");
+       assert_eq!(json["error"]["code"], -32601); // Method not found
    }
    ```
 
-2. **Integration Tests (macOS only)**
+3. **Error Handling Tests**
    ```rust
-   #[cfg(target_os = "macos")]
    #[test]
-   async fn test_control_char_sender_initialize_real() {
-       let mut sender = ControlCharacterSender::new();
-       let result = sender.initialize().await;
+   fn test_handler_error() {
+       let router = Router::new();
        
-       assert!(result.is_ok(), "Initialize should succeed on macOS");
-       assert!(sender.tty_path.is_some(), "TTY path should be set");
+       // Registrar ferramenta que sempre retorna erro
+       let tool_def = ToolDefinition {
+           name: "test:error".to_string(),
+           description: "Error test tool".to_string(),
+           parameters: Default::default(),
+       };
        
-       if let Some(path) = &sender.tty_path {
-           assert!(path.starts_with("/dev/"), "TTY path should start with /dev/");
-       }
+       // Handler que sempre falha
+       let handler = Arc::new(|_| {
+           Err(anyhow::anyhow!("Erro proposital para teste"))
+       });
+       
+       router.register_tool("test:error".to_string(), tool_def, handler);
+       
+       // Mensagem para a ferramenta de erro
+       let message = r#"{"id":"test-id","function":"test:error","arguments":{}}"#;
+       
+       // Processar mensagem
+       let result = router.process_message(message);
+       
+       // Verificar erro apropriado
+       assert!(result.is_ok());
+       
+       // Verificar conteúdo da resposta
+       let response = result.unwrap();
+       let json: serde_json::Value = serde_json::from_str(&response).unwrap();
+       
+       assert_eq!(json["type"], "error");
+       assert!(json["error"]["message"].as_str().unwrap().contains("Erro proposital"));
    }
    ```
 
@@ -464,9 +515,10 @@ echo "backslash \\ e newline \n"
 Este planejamento garante cobertura completa de testes, qualidade de código e confiabilidade do sistema em produção.
 
 ## Status Atual
-- [x] 15 testes passando
+- [x] 15+ testes passando
 - [x] Módulo AppleScript bem coberto
-- [ ] TtyReader precisa de implementação e testes (PRIORIDADE ALTA)
-- [ ] ControlCharacterSender precisa de implementação e testes (PRIORIDADE ALTA)
-- [ ] Router precisa de implementação de protocolo MCP (PRIORIDADE MÉDIA)
+- [x] TtyReader implementado e testado
+- [x] ControlCharacterSender implementado e testado
+- [x] Router MCP implementado e testado
+- [ ] Process Tracker pendente (PRIORIDADE BAIXA)
 
