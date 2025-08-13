@@ -413,3 +413,101 @@ pub use tty_reader::TtyReader;
 pub use applescript::escape as escape_applescript;
 pub use applescript::osascript_with_timeout;
 pub use applescript::{MockOsascriptRunner, OsascriptRunner, SystemOsascriptRunner};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    mod tty_reader_tests {
+        use super::*;
+        use crate::mcp::iterm::TtyReader;
+        
+        #[test]
+        fn test_strip_ansi_codes() {
+            let mut reader = TtyReader::new();
+            
+            // Test with ANSI color codes
+            let input = "\x1B[31mRed Text\x1B[0m and \x1B[32mGreen Text\x1B[0m";
+            assert_eq!(reader.strip_ansi_codes(input), "Red Text and Green Text");
+            
+            // Test with cursor movement codes
+            let input = "Text with \x1B[1A\x1B[2Kmovement codes";
+            assert_eq!(reader.strip_ansi_codes(input), "Text with movement codes");
+            
+            // Test with no ANSI codes
+            let input = "Plain text without codes";
+            assert_eq!(reader.strip_ansi_codes(input), input);
+            
+            // Test with empty string
+            let input = "";
+            assert_eq!(reader.strip_ansi_codes(input), "");
+        }
+        
+        #[test]
+        fn test_extract_lines() {
+            let reader = TtyReader::new();
+            
+            // Test with more lines than requested
+            let input = "line1\nline2\nline3\nline4\nline5";
+            assert_eq!(reader.extract_lines(input, 3), "line3\nline4\nline5");
+            
+            // Test with fewer lines than requested
+            assert_eq!(reader.extract_lines(input, 10), input);
+            
+            // Test with exact number of lines
+            assert_eq!(reader.extract_lines(input, 5), input);
+            
+            // Test with empty input
+            assert_eq!(reader.extract_lines("", 5), "");
+            
+            // Test with zero lines requested
+            assert_eq!(reader.extract_lines(input, 0), "");
+            
+            // Test with one line input
+            let input = "single line";
+            assert_eq!(reader.extract_lines(input, 1), input);
+        }
+        
+        #[test]
+        fn test_new_with_config() {
+            // Test custom buffer size and strip_ansi setting
+            let reader = TtyReader::new_with_config(16384, false);
+            assert_eq!(reader.buffer_size, 16384);
+            assert_eq!(reader.strip_ansi, false);
+            
+            // Test defaults
+            let reader = TtyReader::new();
+            assert_eq!(reader.buffer_size, 8192);
+            assert_eq!(reader.strip_ansi, true);
+        }
+    }
+    
+    mod control_char_tests {
+        use super::*;
+        
+        #[test]
+        fn test_letter_to_control_char() {
+            // Test A-Z mappings
+            assert_eq!(crate::mcp::utilities::letter_to_control_char("A").unwrap(), 1);
+            assert_eq!(crate::mcp::utilities::letter_to_control_char("Z").unwrap(), 26);
+            
+            // Test case insensitivity
+            assert_eq!(crate::mcp::utilities::letter_to_control_char("a").unwrap(), 1);
+            assert_eq!(crate::mcp::utilities::letter_to_control_char("c").unwrap(), 3);
+            
+            // Test special characters
+            assert_eq!(crate::mcp::utilities::letter_to_control_char("@").unwrap(), 0);  // NUL
+            assert_eq!(crate::mcp::utilities::letter_to_control_char("[").unwrap(), 27); // ESC
+            assert_eq!(crate::mcp::utilities::letter_to_control_char("\\").unwrap(), 28); // FS
+            assert_eq!(crate::mcp::utilities::letter_to_control_char("]").unwrap(), 29); // GS
+            assert_eq!(crate::mcp::utilities::letter_to_control_char("^").unwrap(), 30); // RS
+            assert_eq!(crate::mcp::utilities::letter_to_control_char("_").unwrap(), 31); // US
+            
+            // Test invalid inputs
+            assert!(crate::mcp::utilities::letter_to_control_char("").is_err());
+            assert!(crate::mcp::utilities::letter_to_control_char("AB").is_err());
+            assert!(crate::mcp::utilities::letter_to_control_char("1").is_err());
+            assert!(crate::mcp::utilities::letter_to_control_char("?").is_err());
+        }
+    }
+}
