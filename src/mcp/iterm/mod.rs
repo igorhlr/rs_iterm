@@ -482,13 +482,13 @@ mod tests {
         fn test_new_with_config() {
             // Test custom buffer size and strip_ansi setting
             let reader = TtyReader::new_with_config(16384, false);
-            assert_eq!(reader.buffer_size, 16384);
-            assert_eq!(reader.strip_ansi, false);
+            assert_eq!(reader.get_buffer_size(), 16384);
+            assert_eq!(reader.is_strip_ansi_enabled(), false);
             
             // Test defaults
             let reader = TtyReader::new();
-            assert_eq!(reader.buffer_size, 8192);
-            assert_eq!(reader.strip_ansi, true);
+            assert_eq!(reader.get_buffer_size(), 8192);
+            assert_eq!(reader.is_strip_ansi_enabled(), true);
         }
     }
     
