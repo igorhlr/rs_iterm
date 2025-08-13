@@ -31,47 +31,47 @@ iterm_mcp_rust/
 ## 📋 FASE 1: Setup e Estrutura Base
 
 ### ✅ 1.1 Setup do Projeto
-- [ ] Criar diretório `iterm_mcp_rust`
-- [ ] Inicializar projeto Rust (`cargo init`)
-- [ ] Configurar `.gitignore` Rust padrão
-- [ ] Criar estrutura de diretórios MCP
-- [ ] Configurar editor/IDE para Rust
+- [x] Criar diretório `iterm_mcp_rust`
+- [x] Inicializar projeto Rust (`cargo init`)
+- [x] Configurar `.gitignore` Rust padrão
+- [x] Criar estrutura de diretórios MCP
+- [x] Configurar editor/IDE para Rust
 
 ### ✅ 1.2 Configuração Cargo.toml
 - [ ] Copiar base do rs_filesystem
 - [ ] Adaptar nome e metadados do projeto
-- [ ] Adicionar dependências específicas:
-  - [ ] `tokio` para async runtime
-  - [ ] `serde` e `serde_json` para serialização
-  - [ ] `rpc-router` para roteamento MCP
-  - [ ] `clap` para CLI parsing
-  - [ ] `regex` para parsing de strings
-- [ ] Configurar profiles de build otimizados
-- [ ] Adicionar features condicionais (macOS only)
+- [x] Adicionar dependências específicas:
+  - [x] `tokio` para async runtime
+  - [x] `serde` e `serde_json` para serialização
+  - [x] `rpc-router` para roteamento MCP (ajustada para versão compatível durante desenvolvimento)
+  - [x] `clap` para CLI parsing
+  - [x] `regex` para parsing de strings
+- [x] Configurar profiles de build otimizados
+- [x] Adicionar features condicionais (macOS only)
 
 ### ✅ 1.3 Estrutura de Módulos
-- [ ] Criar `src/mcp/mod.rs` como módulo principal
-- [ ] Criar `src/mcp/iterm/mod.rs` para funcionalidades iTerm
-- [ ] Configurar visibilidade de módulos
+- [x] Criar `src/mcp/mod.rs` como módulo principal
+- [x] Criar `src/mcp/iterm/mod.rs` para funcionalidades iTerm (stubs iniciais)
+- [x] Configurar visibilidade de módulos
 - [ ] Estabelecer convenções de naming
-- [ ] Documentar estrutura modular
+- [x] Documentar estrutura modular (documentação inicial em /docs/planejamento)
 
 ### ✅ 1.4 Tipos Básicos MCP
-- [ ] Copiar `types.rs` do rs_filesystem
-- [ ] Adicionar tipos específicos do iTerm:
-  - [ ] `WriteToTerminalParams`
-  - [ ] `ReadTerminalOutputParams`
-  - [ ] `SendControlCharacterParams`
-  - [ ] `ProcessInfo` e `ProcessMetrics`
-- [ ] Implementar traits de serialização
-- [ ] Adicionar validação de tipos
+- [x] Copiar `types.rs` do rs_filesystem (base adaptada)
+- [x] Adicionar tipos específicos do iTerm:
+  - [x] `WriteToTerminalParams`
+  - [x] `ReadTerminalOutputParams`
+  - [x] `SendControlCharacterParams`
+  - [x] `ProcessInfo` e `ProcessMetrics`
+- [x] Implementar traits de serialização (serde derives presentes)
+- [ ] Adicionar validação de tipos (próximo passo: validações mais rígidas)
 
 ### ✅ 1.5 Servidor Principal
-- [ ] Adaptar `main.rs` do rs_filesystem
-- [ ] Configurar roteador com ferramentas iTerm
-- [ ] Implementar logging específico
-- [ ] Adicionar tratamento de sinais macOS
-- [ ] Configurar CLI com comandos de diagnóstico
+- [x] Adaptar `main.rs` do rs_filesystem (entry com clap/log)
+- [x] Configurar roteador com ferramentas iTerm (registro via `mcp::tools`)
+- [x] Implementar logging específico (tracing/tracing-subscriber configurado)
+- [ ] Adicionar tratamento de sinais macOS (a implementar)
+- [x] Configurar CLI com comandos de diagnóstico (clap já presente)
 
 ---
 
@@ -117,11 +117,11 @@ iterm_mcp_rust/
 ## 🔧 FASE 3: Core Tools Implementation
 
 ### ✅ 3.1 write_to_terminal
-- [ ] Implementar handler `write_to_terminal`
-- [ ] Integrar com CommandExecutor
-- [ ] Adicionar validação de parâmetros
-- [ ] Implementar tracking de execução
-- [ ] Retornar informações de resultado
+- [x] Implementar handler `write_to_terminal` (registrado em `mcp::tools`)
+- [x] Integrar com CommandExecutor (stub presente em `mcp::iterm`)
+- [x] Adicionar validação de parâmetros (básica via serde + schema)
+- [ ] Implementar tracking de execução (planejado)
+- [x] Retornar informações de resultado (MCP response shape definido)
 
 ### ✅ 3.2 Execution Tracking
 - [ ] Implementar polling de status iTerm
@@ -131,24 +131,24 @@ iterm_mcp_rust/
 - [ ] Logging de performance
 
 ### ✅ 3.3 read_terminal_output
-- [ ] Implementar handler `read_terminal_output`
-- [ ] Integrar com TTY Output Reader
-- [ ] Adicionar filtragem por número de linhas
+- [x] Implementar handler `read_terminal_output` (registrado em `mcp::tools`)
+- [x] Integrar com TTY Output Reader (stub `TtyReader` presente)
+- [ ] Adicionar filtragem por número de linhas (próximo passo: preencher leitura real)
 - [ ] Implementar cache inteligente
 - [ ] Otimizar para buffers grandes
 
 ### ✅ 3.4 TTY Output Reader
-- [ ] Criar `src/mcp/iterm/tty_reader.rs`
-- [ ] Implementar leitura completa do buffer
+- [x] Criar `src/mcp/iterm/tty_reader.rs` (stub dentro de `iterm/mod.rs`)
+- [ ] Implementar leitura completa do buffer (a implementar)
 - [ ] Adicionar parsing de conteúdo do terminal
 - [ ] Implementar filtragem eficiente
 - [ ] Otimizar memory usage
 
 ### ✅ 3.5 send_control_character
-- [ ] Implementar handler `send_control_character`
-- [ ] Criar mapeamento de caracteres de controle
-- [ ] Adicionar suporte a sequências especiais
-- [ ] Validar códigos ASCII
+- [x] Implementar handler `send_control_character` (registrado em `mcp::tools`)
+- [x] Criar mapeamento de caracteres de controle (básico em utilities + stub de envio)
+- [ ] Adicionar suporte a sequências especiais (planejado)
+- [x] Validar códigos ASCII (validação básica presente)
 - [ ] Implementar casos especiais (Escape, telnet)
 
 ---
@@ -199,7 +199,7 @@ iterm_mcp_rust/
 - [ ] Adicionar testes para AppleScript wrapper
 - [ ] Implementar testes para TTY reader
 - [ ] Criar mocks para process tracking
-- [ ] Adicionar testes de string escaping
+- [x] Adicionar testes de string escaping (teste inicial implementado em `src/mcp/tests/basic_tests.rs`)
 
 ### ✅ 5.2 Integration Tests
 - [ ] Criar testes end-to-end com iTerm

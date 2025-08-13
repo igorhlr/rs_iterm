@@ -24,10 +24,12 @@
 - [ ] **String Escaping**
   - [ ] Caracteres simples
   - [ ] Aspas duplas e simples
-  - [ ] Backslashes
+  - [x] Backslashes
   - [ ] Caracteres especiais Unicode
   - [ ] Strings vazias e null
   - [ ] Strings muito grandes (>1MB)
+
+- [x] Basic unit test for AppleScript string escaping passed (see `src/mcp/tests/basic_tests.rs`) — backslash and double-quote escaping verified; tests are currently green.
 
 - [ ] **Command Building**
   - [ ] Comandos simples
