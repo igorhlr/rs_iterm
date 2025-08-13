@@ -263,7 +263,7 @@ pub mod tty_reader {
         }
         
         /// Strip ANSI escape sequences from a string.
-        fn strip_ansi_codes(&mut self, input: &str) -> String {
+        pub fn strip_ansi_codes(&mut self, input: &str) -> String {
             // Lazy initialize the regex
             if self.ansi_regex.is_none() {
                 // This regex matches common ANSI escape sequences:
